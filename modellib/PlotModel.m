@@ -47,7 +47,7 @@ sqrflag = true;
 par     = npar;
 
 if strcmp(dataset(1).CoordSystem,'ProjectProfile')
-   data=dataset(:).datavec ;  
+   data=dataset(:).datavec;  
    disp('NOEL: plot data and pred ! ');
    plotmodelopt.y_unit = dataset.Unit ;
    logplot('PlotProfile',out_name,dataset.coord(1,:),[data;pred'],plotmodelopt);
@@ -104,6 +104,8 @@ end
 
 if ~modulo      modulo = Fringe;     end
 if ~modulo_res  modulo_res = Fringe; end
+
+%modulo = modulo * 4;       % FA 12/2016  test to improve CSK plots
 
 ClimGrid=[-modulo/56 modulo] ;   ClimGrid_res=[-modulo_res/56 modulo_res];
 %modulo=0; %ClimGrid=[-0.05 0.05];   ClimGrid_res=[-0.05 0.05];
@@ -176,6 +178,49 @@ case {'Grid'}
          charGPSvert    = ['H=quiver(dGPS.xy(1,:),dGPS.xy(2,:),zeros(size(dGPS.enu(3,:))),dGPS.enu(3,:),vscale,''b'',''LineWidth'',2);',...
                            'H=quiver(mGPS.xy(1,:),mGPS.xy(2,:),zeros(size(mGPS.enu(3,:))),mGPS.enu(3,:),vscale,''r'');'];
          charGPSvertRes =  'H=quiver(dGPS.xy(1,:),dGPS.xy(2,:),zeros(size(rGPS_enu(3,:))),rGPS_enu(3,:),vscale,''r'',''LineWidth'',2);';
+         
+         % Base autoscale value on average spacing in the x and y
+         % directions.  Estimate number of points in each direction as
+         % either the size of the input arrays or the effective square
+         % spacing if x and y are vectors. (from quiver.m)
+         hscale = 1;
+         vscale = 1;
+         if min(size(dGPS.xy(1,:)))==1, n=sqrt(numel(dGPS.xy(1,:))); m=n; else [m,n]=size(dGPS.xy(1,:)); end
+         delx = diff([min(dGPS.xy(1,:)) max(dGPS.xy(1,:))])/n;
+         dely = diff([min(dGPS.xy(2,:)) max(dGPS.xy(2,:))])/m;
+         del = delx.^2 + dely.^2;
+         % Adjust horizontal scale
+         if del>0
+             len = sqrt((dGPS.enu(1,:).^2 + dGPS.enu(2,:).^2 + dGPS.sig(1,:).^2 + dGPS.sig(2,:).^2)/del);
+             maxlen = max(len(:));
+         else
+             maxlen = 0;
+         end
+         
+         if maxlen>0
+             hscale = hscale*0.9 / maxlen;
+         else
+             hscale = hscale*0.9;
+         end
+         % Adjust vertial scale
+         if del>0
+             len = sqrt((zeros(1,length(dGPS.enu(3,:))).^2 + dGPS.enu(3,:).^2 + zeros(1,length(dGPS.enu(3,:))).^2 + dGPS.sig(3,:).^2)/del);
+             maxlen = max(len(:));
+         else
+             maxlen = 0;
+         end
+         
+         if maxlen>0
+             vscale = vscale*0.9 / maxlen;
+         else
+             vscale = vscale*0.9;
+         end
+         
+         %hscale = max((max(east+lons)-min(east+lons))/(x_last-x_first),...
+         %             (max(north+lats)-min(north+lats))/(y_first-y_last))*3;
+         %hscale = max(sqrt(east.^2+north.^2))*1.2;
+         %vscale = max(dGPS.enu(3,:)+dGPS.sig(3,:));
+         
      end
 %      if GPShorz; charGPS   =['H=DM_Quiver(dGPS.xy,dGPS.enu(:),dGPS.dcov,1.0); set(H,''color'',''b'',''LineWidth'',2); H=DM_Quiver(mGPS.xy,mGPS.enu(:),mGPS.dcov*0,1.0); set(H,''color'',''b'');']; end
 %      if GPShorz; charGPSres=['H=DM_Quiver(dGPS.xy,dGPS.enu(:)-mGPS.enu(:),dGPS.dcov,1.0); set(H,''color'',''r'')'];  end
@@ -223,11 +268,11 @@ if nargout>=1
 end
 if nargout>=2
      predout=[];
-     if SAR_1 predout(1).data=flipud(pred_1);        end
-     if SAR_2 predout(2).data=flipud(pred_2);        end
-     if SAR_3 predout(3).data=flipud(pred_3);        end
-     if SAR_4 predout(4).data=flipud(pred_4);        end
-     if SAR_5 predout(5).data=flipud(pred_5);        end
+     if SAR_1 predout(1).data=flipud(pred_1.*amp_1); end     % FA 12/2016: included amp_1 to mask
+     if SAR_2 predout(2).data=flipud(pred_2.*amp_2); end
+     if SAR_3 predout(3).data=flipud(pred_3.*amp_3); end
+     if SAR_4 predout(4).data=flipud(pred_4.*amp_4); end
+     if SAR_5 predout(5).data=flipud(pred_5.*amp_5); end
 end
 % TODO: Instead of interpolating u and pred based on dataset(1) coordinates I should recalculate on a dense grid
 if nargout>=3
@@ -544,8 +589,10 @@ if GPShorz || GPSvert
         %H=DM_Quiver(dGPS.xy,dGPS.enu(:),dGPS.dcov,1.0) ; set(H,'color','r')
         %H=DM_Quiver(mGPS.xy,mGPS.enu(:),mGPS.dcov*0,1.0) ; set(H,'color','b')   % FA 8/08 commented out. Did not work  for Gina's ECSZ data
         image(crnr_xy(1,:),crnr_xy(2,:),basemap.shade);
-        hold on ; quiver(dGPS.xy(1,:),dGPS.xy(2,:),dGPS.enu(1,:),dGPS.enu(2,:),'b','LineWidth',2)
-        hold on ; quiver(mGPS.xy(1,:),mGPS.xy(2,:),mGPS.enu(1,:),mGPS.enu(2,:),'r')
+        hold on ;
+        quiver(dGPS.xy(1,:),dGPS.xy(2,:),dGPS.enu(1,:)*hscale,dGPS.enu(2,:)*hscale,0,'b','LineWidth',2)
+        ellipse(dGPS.sig(1,:)*hscale,dGPS.sig(2,:)*hscale,zeros(size(dGPS.enu(1,:))),dGPS.xy(1,:)+dGPS.enu(1,:)*hscale,dGPS.xy(2,:)+dGPS.enu(2,:)*hscale,'b')
+        hold on ; quiver(mGPS.xy(1,:),mGPS.xy(2,:),mGPS.enu(1,:)*hscale,mGPS.enu(2,:)*hscale,0,'r')
         
         hold on; displotmulti(par,objfunc,modelopt,x_unit);   hold off;
         
@@ -567,8 +614,9 @@ if GPShorz || GPSvert
         %            H=DM_Quiver(dGPS.xy,denu(:),dGPS.dcov*0,1.0) ; set(H,'color','r')
         %            H=DM_Quiver(mGPS.xy,menu(:),mGPS.dcov*0,1.0) ; set(H,'color','b')
         image(crnr_xy(1,:),crnr_xy(2,:),basemap.shade);
-        hold on ; quiver(dGPS.xy(1,:),dGPS.xy(2,:),zeros(1,length(dGPS.enu(3,:))),dGPS.enu(3,:),'b','LineWidth',2)
-        hold on ; quiver(mGPS.xy(1,:),mGPS.xy(2,:),zeros(1,length(mGPS.enu(3,:))),mGPS.enu(3,:),'r')
+        hold on ; quiver(dGPS.xy(1,:),dGPS.xy(2,:),zeros(1,length(dGPS.enu(3,:))),dGPS.enu(3,:)*vscale,0,'b','LineWidth',2)
+        hold on ; errorbar(dGPS.xy(1,:),dGPS.xy(2,:)+dGPS.enu(3,:)*vscale,dGPS.sig(3,:)*vscale,'bo','MarkerSize',3)
+        hold on ; quiver(mGPS.xy(1,:),mGPS.xy(2,:),zeros(1,length(mGPS.enu(3,:))),mGPS.enu(3,:)*vscale,0,'r')
         
         hold on; displotmulti(par,objfunc,modelopt,x_unit);   hold off;
         %if exist('Faults')    hold on ; plot(Faults(:,1),Faults(:,2),'b') ; hold off ; end
